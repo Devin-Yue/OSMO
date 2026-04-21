@@ -158,3 +158,107 @@ test.describe("Workflow Row Interaction", () => {
     await expect(page).toHaveURL(/\/workflows\/clickable-workflow/, { timeout: 15_000 });
   });
 });
+
+test.describe("Workflows Toolbar", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await setupDefaultMocks(page);
+    await setupProfile(page);
+  });
+
+  test("has toolbar with search and column controls", async ({ page }) => {
+    // ARRANGE
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "toolbar-workflow", status: WorkflowStatus.RUNNING, user: "test-user" },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/workflows?all=true");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — toolbar controls are present
+    await expect(page.getByRole("combobox", { name: /search and filter/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /toggle columns/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeVisible();
+  });
+
+  test("shows breadcrumb with Workflows", async ({ page }) => {
+    // ARRANGE
+    await setupWorkflows(page, createWorkflowsResponse([]));
+
+    // ACT
+    await page.goto("/workflows?all=true");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT
+    const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
+    await expect(breadcrumb.getByText("Workflows").first()).toBeVisible();
+  });
+
+  test("search creates a filter chip for the typed workflow name", async ({ page }) => {
+    // ARRANGE
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "train-resnet-50", status: WorkflowStatus.RUNNING, user: "alice" },
+        { name: "eval-bert-base", status: WorkflowStatus.COMPLETED, user: "bob" },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/workflows?all=true");
+    await page.waitForLoadState("networkidle");
+
+    // The search input is a combobox (chip-based filter, not free-text search)
+    const searchInput = page.getByRole("combobox", { name: /search and filter/i });
+    await searchInput.fill("train-resnet");
+    await searchInput.press("Enter");
+
+    // ASSERT — Pressing Enter commits a chip — the URL reflects the active filter
+    await expect(page).toHaveURL(/f=name(%3A|:)train-resnet/);
+    // Matched workflow remains visible
+    await expect(page.getByText("train-resnet-50").first()).toBeVisible();
+  });
+
+  test("shows results count", async ({ page }) => {
+    // ARRANGE
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "wf-1", status: WorkflowStatus.RUNNING, user: "user-1" },
+        { name: "wf-2", status: WorkflowStatus.COMPLETED, user: "user-2" },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/workflows?all=true");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — results count is displayed
+    await expect(page.getByText(/\d+ results/).first()).toBeVisible();
+  });
+
+  test("toggle columns button opens column visibility menu", async ({ page }) => {
+    // ARRANGE
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "col-workflow", status: WorkflowStatus.RUNNING, user: "test-user" },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/workflows?all=true");
+    await page.waitForLoadState("networkidle");
+
+    // Click the toggle columns button
+    const toggleButton = page.getByRole("button", { name: /toggle columns/i });
+    await toggleButton.click();
+
+    // ASSERT — column options appear (popover/dropdown opens)
+    await expect(page.getByRole("menuitemcheckbox").first()).toBeVisible();
+  });
+});

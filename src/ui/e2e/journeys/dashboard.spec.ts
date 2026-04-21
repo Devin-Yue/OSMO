@@ -160,6 +160,61 @@ test.describe("Dashboard Recent Workflows", () => {
   });
 });
 
+test.describe("Dashboard Stat Card Links", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await setupDefaultMocks(page);
+    await setupProfile(page);
+  });
+
+  test("Active Workflows stat card links to workflows filtered by RUNNING status", async ({ page }) => {
+    // ARRANGE
+    await setupPools(page, createPoolResponse([{ name: "prod", status: PoolStatus.ONLINE }]));
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "running-1", status: WorkflowStatus.RUNNING },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Click the Active Workflows stat card
+    const activeCard = page.getByText("Active Workflows").first();
+    await activeCard.click();
+
+    // ASSERT — navigates to workflows filtered by RUNNING status
+    await expect(page).toHaveURL(/\/workflows/);
+    await expect(page).toHaveURL(/status.*RUNNING|RUNNING.*status/);
+  });
+
+  test("Pools Online stat card links to pools filtered by ONLINE status", async ({ page }) => {
+    // ARRANGE
+    await setupPools(
+      page,
+      createPoolResponse([
+        { name: "prod", status: PoolStatus.ONLINE },
+        { name: "dev", status: PoolStatus.OFFLINE },
+      ]),
+    );
+    await setupWorkflows(page, createWorkflowsResponse([]));
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Click the Pools Online stat card
+    const poolsCard = page.getByText("Pools Online").first();
+    await poolsCard.click();
+
+    // ASSERT — navigates to pools filtered by ONLINE status
+    await expect(page).toHaveURL(/\/pools/);
+    await expect(page).toHaveURL(/status.*ONLINE|ONLINE.*status/);
+  });
+});
+
 test.describe("Dashboard Version", () => {
   test.beforeEach(async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -178,5 +233,102 @@ test.describe("Dashboard Version", () => {
 
     // ASSERT — version string from createVersion() defaults: major=2, minor=5, revision=1
     await expect(page.getByText(/OSMO v\d+\.\d+\.\d+/).first()).toBeVisible();
+  });
+});
+
+test.describe("Dashboard Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await setupDefaultMocks(page);
+    await setupProfile(page);
+  });
+
+  test("page title includes OSMO", async ({ page }) => {
+    // ARRANGE — empty data
+    await setupPools(page, createPoolResponse([]));
+    await setupWorkflows(page, createWorkflowsResponse([]));
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — root layout sets title to "OSMO"; dashboard usePage only sets header title
+    await expect(page).toHaveTitle(/OSMO/);
+  });
+
+  test("shows dashboard even when no workflows or pools exist", async ({ page }) => {
+    // ARRANGE — empty data
+    await setupPools(page, createPoolResponse([]));
+    await setupWorkflows(page, createWorkflowsResponse([]));
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — stat cards are still visible with zero/empty values
+    await expect(page.getByText("Active Workflows").first()).toBeVisible();
+    await expect(page.getByText("Pools Online").first()).toBeVisible();
+
+    // Recent Workflows section is visible
+    await expect(page.getByText("Recent Workflows").first()).toBeVisible();
+  });
+
+  test("failed workflows stat card links to workflows filtered by FAILED status", async ({ page }) => {
+    // ARRANGE
+    await setupPools(page, createPoolResponse([{ name: "prod", status: PoolStatus.ONLINE }]));
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "failed-1", status: WorkflowStatus.FAILED },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Click the Failed (24h) stat card
+    const failedCard = page.getByText("Failed (24h)").first();
+    await failedCard.click();
+
+    // ASSERT — navigates to workflows with failed status filter
+    await expect(page).toHaveURL(/\/workflows/);
+    await expect(page).toHaveURL(/status.*FAILED|FAILED.*status/);
+  });
+
+  test("completed workflows stat card links to workflows filtered by COMPLETED status", async ({ page }) => {
+    // ARRANGE
+    await setupPools(page, createPoolResponse([{ name: "prod", status: PoolStatus.ONLINE }]));
+    await setupWorkflows(
+      page,
+      createWorkflowsResponse([
+        { name: "completed-1", status: WorkflowStatus.COMPLETED },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Click the Completed (24h) stat card
+    const completedCard = page.getByText("Completed (24h)").first();
+    await completedCard.click();
+
+    // ASSERT — navigates to workflows with completed status filter
+    await expect(page).toHaveURL(/\/workflows/);
+    await expect(page).toHaveURL(/status.*COMPLETED|COMPLETED.*status/);
+  });
+
+  test("recent workflows section renders", async ({ page }) => {
+    // ARRANGE — no workflows via route mock (SSR prefetch may still provide data from MSW)
+    await setupPools(page, createPoolResponse([{ name: "prod", status: PoolStatus.ONLINE }]));
+    await setupWorkflows(page, createWorkflowsResponse([]));
+
+    // ACT
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — Recent Workflows section is visible regardless of data source
+    await expect(page.getByText("Recent Workflows").first()).toBeVisible();
   });
 });

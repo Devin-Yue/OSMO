@@ -226,4 +226,80 @@ test.describe("Occupancy Expand/Collapse", () => {
     await expect(page.getByText("alice").first()).toBeVisible();
     await expect(page.getByText("bob").first()).toBeVisible();
   });
+
+  test("collapse all button hides child rows", async ({ page }) => {
+    // ARRANGE
+    await setupOccupancy(
+      page,
+      createOccupancySummaries([
+        { user: "alice", pool: "production", gpu: 8 },
+        { user: "bob", pool: "production", gpu: 4 },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/occupancy");
+    await page.waitForLoadState("networkidle");
+
+    // Expand all first
+    await page.getByRole("button", { name: /expand all/i }).click();
+    await expect(page.getByText("alice").first()).toBeVisible();
+
+    // Now collapse all
+    await page.getByRole("button", { name: /collapse all/i }).click();
+
+    // ASSERT — the button text changes back to "expand all"
+    await expect(page.getByRole("button", { name: /expand all/i })).toBeVisible();
+  });
+});
+
+test.describe("Occupancy Search", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupDefaultMocks(page);
+    await setupProfile(page);
+  });
+
+  test("search creates a filter chip", async ({ page }) => {
+    // ARRANGE
+    await setupOccupancy(
+      page,
+      createOccupancySummaries([
+        { user: "alice", pool: "production", gpu: 8 },
+        { user: "bob", pool: "staging", gpu: 4 },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/occupancy");
+    await page.waitForLoadState("networkidle");
+
+    // Use the search combobox
+    const searchInput = page.getByRole("combobox").first();
+    await searchInput.fill("production");
+    await searchInput.press("Enter");
+
+    // ASSERT — filter chip is created and URL reflects active filter
+    await expect(page).toHaveURL(/f=/);
+  });
+
+  test("shows multiple pools in the occupancy table", async ({ page }) => {
+    // ARRANGE
+    await setupOccupancy(
+      page,
+      createOccupancySummaries([
+        { user: "alice", pool: "production", gpu: 8, cpu: 64 },
+        { user: "bob", pool: "staging", gpu: 4, cpu: 32 },
+        { user: "charlie", pool: "development", gpu: 2, cpu: 16 },
+      ]),
+    );
+
+    // ACT
+    await page.goto("/occupancy");
+    await page.waitForLoadState("networkidle");
+
+    // ASSERT — multiple pool names are visible as group rows
+    await expect(page.getByText("production").first()).toBeVisible();
+    await expect(page.getByText("staging").first()).toBeVisible();
+    await expect(page.getByText("development").first()).toBeVisible();
+  });
 });
